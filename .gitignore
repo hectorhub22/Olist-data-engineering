@@ -1,0 +1,10 @@
+# Airflow
+logs/
+
+# Datos y Bases de Datos
+data/
+metabase-data/
+
+# Python
+__pycache__/
+.env
