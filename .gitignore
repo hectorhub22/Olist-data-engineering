@@ -2,7 +2,9 @@
 logs/
 
 # Datos y Bases de Datos
-data/
+data/**
+!data/.gitkeep
+!data/README.md
 metabase-data/
 
 # Python
