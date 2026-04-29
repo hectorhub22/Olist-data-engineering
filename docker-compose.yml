@@ -19,38 +19,54 @@ services:
       - ./data/postgres:/var/lib/postgresql/data
 
   airflow-init:
-    image: apache/airflow:2.8.1
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/olist
-      _PIP_ADDITIONAL_DEPENDENCIES: "pandas numpy"
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      OLIST_PG_HOST: postgres
+      OLIST_PG_PORT: 5432
+      OLIST_PG_DB: olist
+      OLIST_PG_USER: airflow
+      OLIST_PG_PASSWORD: airflow
+      SPARK_MASTER_URL: spark://spark-master:7077
     command: >
       bash -c "airflow db migrate &&
       airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin"
     user: "0:0"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./spark_jobs:/opt/airflow/spark_jobs
       - ./data:/opt/airflow/data
       - ./logs:/opt/airflow/logs
 
   airflow-webserver:
-    image: apache/airflow:2.8.1
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: olist_airflow_webserver
     command: webserver
     restart: always
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/olist
-      _PIP_ADDITIONAL_DEPENDENCIES: "pandas numpy"
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      OLIST_PG_HOST: postgres
+      OLIST_PG_PORT: 5432
+      OLIST_PG_DB: olist
+      OLIST_PG_USER: airflow
+      OLIST_PG_PASSWORD: airflow
+      SPARK_MASTER_URL: spark://spark-master:7077
     ports:
       - "8080:8080"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./spark_jobs:/opt/airflow/spark_jobs
       - ./data:/opt/airflow/data
       - ./logs:/opt/airflow/logs
     depends_on:
@@ -60,17 +76,25 @@ services:
         condition: service_completed_successfully
 
   airflow-scheduler:
-    image: apache/airflow:2.8.1
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: olist_airflow_scheduler
     command: scheduler
     restart: always
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/olist
-      _PIP_ADDITIONAL_DEPENDENCIES: "pandas numpy"
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      OLIST_PG_HOST: postgres
+      OLIST_PG_PORT: 5432
+      OLIST_PG_DB: olist
+      OLIST_PG_USER: airflow
+      OLIST_PG_PASSWORD: airflow
+      SPARK_MASTER_URL: spark://spark-master:7077
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./spark_jobs:/opt/airflow/spark_jobs
       - ./data:/opt/airflow/data
       - ./logs:/opt/airflow/logs
     depends_on:
@@ -78,6 +102,36 @@ services:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
+
+  spark-master:
+    image: bitnami/spark:3.5.1
+    container_name: olist_spark_master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "7077:7077"
+      - "8081:8080"
+    restart: always
+
+  spark-worker:
+    image: bitnami/spark:3.5.1
+    container_name: olist_spark_worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    restart: always
 
   jupyter:
     image: jupyter/base-notebook

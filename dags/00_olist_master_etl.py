@@ -66,6 +66,11 @@ with DAG(
         trigger_dag_id="10_olist_transform_curated",
         wait_for_completion=True,
     )
+    spark_analytics = TriggerDagRunOperator(
+        task_id="trigger_spark_analytics",
+        trigger_dag_id="20_olist_spark_analytics",
+        wait_for_completion=True,
+    )
 
     end = EmptyOperator(task_id="end")
 
@@ -76,6 +81,7 @@ with DAG(
         >> orders
         >> [order_items, order_payments, order_reviews]
         >> transform_curated
+        >> spark_analytics
         >> end
     )
 
