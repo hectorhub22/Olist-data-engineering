@@ -11,8 +11,26 @@ RUN apt-get update \
 ARG SPARK_VERSION=3.5.1
 ARG HADOOP_PROFILE=hadoop3
 RUN mkdir -p /opt/spark \
-  && curl -fsSL "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${HADOOP_PROFILE}.tgz" \
-  | tar -xz --strip-components=1 -C /opt/spark
+  && for url in \
+      "https://downloads.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${HADOOP_PROFILE}.tgz" \
+      "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-${HADOOP_PROFILE}.tgz" \
+    ; do \
+      echo "Downloading Spark from $url" ; \
+      if curl -fL \
+        --retry 5 \
+        --retry-all-errors \
+        --retry-delay 2 \
+        --connect-timeout 20 \
+        --max-time 900 \
+        -o /tmp/spark.tgz \
+        "$url" \
+      ; then \
+        break ; \
+      fi ; \
+    done \
+  && test -s /tmp/spark.tgz \
+  && tar -xzf /tmp/spark.tgz --strip-components=1 -C /opt/spark \
+  && rm -f /tmp/spark.tgz
 
 ENV SPARK_HOME=/opt/spark
 ENV PATH="${SPARK_HOME}/bin:${PATH}"
