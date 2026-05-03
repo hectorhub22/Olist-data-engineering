@@ -1,4 +1,9 @@
-version: '3.8'
+# Perfiles (aceleran el arranque si no necesitas todo el stack):
+#   docker compose up -d
+#     → solo Postgres + Airflow (init, webserver, scheduler).
+#   docker compose --profile spark --profile kafka --profile notebooks --profile bi up -d
+#     → incluye Spark, Kafka, Jupyter y Metabase.
+# En la primera ejecución, "docker compose build" descarga Spark en la imagen de Airflow (lento una vez).
 services:
   postgres:
     image: postgres:15
@@ -50,12 +55,18 @@ services:
       context: .
       dockerfile: airflow/Dockerfile
     container_name: olist_airflow_webserver
-    command: webserver
+    # Evita PID obsoleto tras crash y da más margen a workers en equipos lentos / Docker Desktop.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - 'rm -f /opt/airflow/airflow-webserver.pid && exec /usr/bin/dumb-init -- /entrypoint webserver'
     restart: always
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/olist
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      # Default 120s: en Windows suele disparar "No response from gunicorn master" y reinicios en bucle.
+      AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: "300"
+      AIRFLOW__WEBSERVER__WORKERS: "2"
       OLIST_PG_HOST: postgres
       OLIST_PG_PORT: 5432
       OLIST_PG_DB: olist
@@ -104,7 +115,8 @@ services:
         condition: service_completed_successfully
 
   spark-master:
-    image: bitnami/spark:3.5.1
+    profiles: [spark]
+    image: bitnamilegacy/spark:3.5.1
     container_name: olist_spark_master
     environment:
       - SPARK_MODE=master
@@ -118,7 +130,8 @@ services:
     restart: always
 
   spark-worker:
-    image: bitnami/spark:3.5.1
+    profiles: [spark]
+    image: bitnamilegacy/spark:3.5.1
     container_name: olist_spark_worker
     environment:
       - SPARK_MODE=worker
@@ -134,6 +147,7 @@ services:
     restart: always
 
   jupyter:
+    profiles: [notebooks]
     image: jupyter/base-notebook
     container_name: olist_jupyter
     ports:
@@ -147,6 +161,7 @@ services:
         condition: service_healthy
 
   metabase:
+    profiles: [bi]
     image: metabase/metabase
     container_name: olist_metabase
     ports:
@@ -159,21 +174,32 @@ services:
         condition: service_healthy
 
   zookeeper:
-    image: bitnami/zookeeper:latest
+    profiles: [kafka]
+    image: confluentinc/cp-zookeeper:7.6.1
     container_name: olist_zookeeper
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    restart: always
 
   kafka:
-    image: bitnami/kafka:latest
+    profiles: [kafka]
+    image: confluentinc/cp-kafka:7.6.1
     container_name: olist_kafka
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     depends_on:
       - zookeeper
+    restart: always
+

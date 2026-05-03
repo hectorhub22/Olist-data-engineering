@@ -28,6 +28,9 @@ def olist_spark_analytics():
 
         cmd = [
             "spark-submit",
+            # Driver JDBC must be on classpath; SparkSession spark.jars.packages alone is unreliable here.
+            "--packages",
+            "org.postgresql:postgresql:42.7.3",
             "--master",
             spark_master,
             "--deploy-mode",
