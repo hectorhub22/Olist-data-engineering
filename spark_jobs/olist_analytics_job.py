@@ -88,6 +88,7 @@ def main() -> None:
         .option("user", pg_user)
         .option("password", pg_password)
         .option("driver", "org.postgresql.Driver")
+        .option("batchsize", "10000")
         .save()
     )
 
@@ -99,6 +100,7 @@ def main() -> None:
         .option("user", pg_user)
         .option("password", pg_password)
         .option("driver", "org.postgresql.Driver")
+        .option("batchsize", "10000")
         .save()
     )
 
@@ -107,4 +109,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
